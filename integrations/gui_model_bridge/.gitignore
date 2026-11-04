@@ -1,0 +1,4 @@
+__pycache__/
+receipts/
+*.sqlite3*
+GUI_WINDOW.lock

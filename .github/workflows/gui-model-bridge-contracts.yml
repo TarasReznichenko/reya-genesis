@@ -1,0 +1,27 @@
+name: GUI model bridge contracts
+on:
+  pull_request:
+  push:
+    branches: [main, 'astra/gui-model-bridge-*']
+permissions:
+  contents: read
+jobs:
+  gui-source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Verify portable source manifest
+        working-directory: integrations/gui_model_bridge
+        run: python -B verify_manifest.py
+      - name: Run synthetic contract tests
+        working-directory: integrations/gui_model_bridge
+        run: python -B run_checks.py

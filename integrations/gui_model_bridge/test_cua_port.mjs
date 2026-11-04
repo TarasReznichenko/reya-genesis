@@ -1,0 +1,20 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {CuaGuiFactory} from './cua_port.mjs';
+function fixture(){
+ const r={request_id:'fixture-1',pin:{package:'fixture',window_id:9,dpi:96},model:'GPT-6 Astra'};
+ const app={clicks:0,chat:'new',empty:true,async getAXState(){return 'synthetic AX';},async click(){this.clicks++;},async setValue(){}};
+ const observer={async attest(){return {pin:r.pin,model:r.model,chat_id:app.chat,empty_chat:app.empty,foreground:true,unlocked:true,logged_in:true,entitled:true,observation:1};},async control(o){return {window_id:o.pin.window_id,observation:o.observation,kind:'click',element:4};},async sendReceipt(o,effect_id){return {chat_id:o.chat_id,effect_id,one_send_observed:true};}};
+ const fence={async run(binding,name,fn){return await fn();}};
+ const f=new CuaGuiFactory(app,observer,fence);const p=f.bind_request(r);p.chat=app.chat;p.attached=true;return {r,app,observer,fence,f,p}; // synthetic ready-to-send precondition
+}
+test('unavailable Flutter tree produces no input',async()=>{const x=fixture();x.app.getAXState=async()=> 'Accessibility state unavailable';await assert.rejects(()=>x.p.new_chat(),/FLUTTER_AX/);assert.equal(x.app.clicks,0);});
+test('model drift at last CUA step denied',async()=>{const x=fixture();const attest=x.observer.attest;x.observer.attest=async()=>({...await attest(),model:'other'});await assert.rejects(()=>x.p.send_once('e'),/PIN_OR_ACCESS/);assert.equal(x.app.clicks,0);});
+test('stale control rejected before input',async()=>{const x=fixture();x.observer.control=async()=>({window_id:9,observation:0,kind:'click',element:4});await assert.rejects(()=>x.p.new_chat(),/OBSERVATION_STALE/);assert.equal(x.app.clicks,0);});
+test('missing trusted host fence denies input',async()=>{const x=fixture();x.p.fence=null;await assert.rejects(()=>x.p.new_chat(),/CP_FENCE/);assert.equal(x.app.clicks,0);});
+test('send timeout is not retried',async()=>{const x=fixture();x.app.click=async()=>{x.app.clicks++;throw Error('synthetic timeout');};await assert.rejects(()=>x.p.send_once('e'),/timeout/);await assert.rejects(()=>x.p.send_once('e'),/ALREADY_ATTEMPTED/);assert.equal(x.app.clicks,1);});
+test('factory permits next distinct request with a fresh port',async()=>{const x=fixture();await x.p.send_once('a');const next=x.f.bind_request({...x.r,request_id:'fixture-2'});next.chat=x.app.chat;next.attached=true;await next.send_once('b');assert.equal(x.app.clicks,2);});
+test('chat drift after bound new chat denies send',async()=>{const x=fixture();await x.p.new_chat();x.p.attached=true;x.app.chat='other';await assert.rejects(()=>x.p.send_once('a'),/CHAT_CHANGED/);assert.equal(x.app.clicks,1);});
+test('unprepared request cannot send',async()=>{const x=fixture();x.p.attached=false;await assert.rejects(()=>x.p.send_once('a'),/WITHOUT_VERIFIED_ATTACHMENT/);assert.equal(x.app.clicks,0);});
+test('STOP between compound attach inputs blocks the next input',async()=>{const x=fixture();let stopped=false;const admitted=[];x.fence.run=async(binding,name,fn)=>{if(stopped)throw Error('OWNER_STOP');admitted.push(name);const v=await fn();stopped=true;return v;};await assert.rejects(()=>x.p.attach('C:/fixture.txt','a'.repeat(64)),/OWNER_STOP/);assert.deepEqual(admitted,['plus']);assert.equal(x.app.clicks,1);});
+test('host fence receives immutable full original request binding',async()=>{const x=fixture();const full={...x.r,operation_id:'trusted-operation-1',person:'fixture-person',sources:[{kind:'SYNTHETIC',text:'fixture'}]};const p=x.f.bind_request(full);full.operation_id='changed';full.sources[0].text='changed';x.fence.run=async(binding,name,fn)=>{assert.equal(binding.operation_id,'trusted-operation-1');assert.equal(binding.sources[0].text,'fixture');assert.ok(Object.isFrozen(binding.sources[0]));return await fn();};await p.new_chat();});
+test('expired login requires owner login without input',async()=>{const x=fixture();const attest=x.observer.attest;x.observer.attest=async()=>({...await attest(),logged_in:false});await assert.rejects(()=>x.p.new_chat(),/REQUIRES_OWNER_LOGIN/);assert.equal(x.app.clicks,0);});
