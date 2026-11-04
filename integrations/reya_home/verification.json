@@ -1,0 +1,59 @@
+{
+  "classification": "AUTHOR_REPORTED_LOCAL_WINDOWS_ACCEPTANCE",
+  "upstream_commit": "6337fc823ce20251c8de8085948165c81aaa701e",
+  "environment": "isolated synthetic Core; real local model",
+  "state": "COMPLETE",
+  "cycles": 3,
+  "cp_actions": 6,
+  "final_count": 1,
+  "same_mandate": true,
+  "prior_attempts_preserved": true,
+  "fixture_restarts": 2,
+  "initial_model_proposal": "REJECTED",
+  "accepted_proposal_executor": "codex-owner-proposal",
+  "implementation_pin": "a60e96cfc0af7649c0dc8ce53b08eb51d815dfc34cca7ece409cd7e868bc9cfc",
+  "verified_ms": 1793694020483,
+  "receipt_sha256": "a61563979faab28f85c1aafa1c16729f79073c3747937ca5ad2b074c8afb19c5",
+  "behaviour_checks": {
+    "changed_budget": "PASS",
+    "changed_destination": "PASS",
+    "changed_goal": "PASS",
+    "changed_input_paths": "PASS",
+    "changed_origin": "PASS",
+    "changed_p": "PASS",
+    "changed_root": "PASS",
+    "identical_replay": "PASS"
+  },
+  "source_files": {
+    "backend/engineering_task.py": {
+      "base_sha256": null,
+      "candidate_sha256": "3244d655c0cc9dde087278614de6b679d028f0c97aad53e81d3c77c63691ffd4"
+    },
+    "backend/system_agent_identity.py": {
+      "base_sha256": null,
+      "candidate_sha256": "6d043998f3b4d557802daaf259f7adf71750f735fa16f9263e16f34219f65bdb"
+    },
+    "backend/durable_goal.py": {
+      "base_sha256": "e92ab486e8b976803086fd981aef2ef3def82e8a48796e37f933d7cbc61eeedf",
+      "candidate_sha256": "a9b40bfe73b54bc3dda3299b0adf31ad1b65adfa80e75ef72aa330db554c021b"
+    },
+    "backend/genesis_gateway.py": {
+      "base_sha256": "70e6e9ed4ec708cb0f92924ec9f3c4fe9e5a6b7d001912846e7323e327b0b42a",
+      "candidate_sha256": "e6bf93123742c4c961dc996598e8f64540b2327a483c34b77f30245e38dc8ed0"
+    },
+    "web/genesis.js": {
+      "base_sha256": "db4b04471e8146b7699ee7549ede74d633c4a093b7b09859ab5a84630ba6bf57",
+      "candidate_sha256": "a64536c0e3641e202593f052548a4c57433900ace329fa269c1ae38d46444e6c"
+    },
+    "web/genesis.html": {
+      "base_sha256": "6ba6c7fd71d45862694508d1b6d7346d570af3ee677ce7bbb759cd92b15dea67",
+      "candidate_sha256": "656a08a36de97244a97c1bbe64cf9c70651ba63eb43a24319986d5d9f8cdd0d3"
+    },
+    "web/index.html": {
+      "base_sha256": "2aedeb743c73b02948bd9092b99b82fefbef363f8beeb18d1d3a7ffc42864440",
+      "candidate_sha256": "08c5a4052d6fe52bb4cfec2646a5ed10e5cae1b42552a999438f4b4c872e0369"
+    }
+  },
+  "live_deployment": "NOT_RUN",
+  "legacy_runtime_mapping": "UNRESOLVED"
+}

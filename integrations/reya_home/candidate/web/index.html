@@ -1,0 +1,40 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#141820"><title>Ева · REYA</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/style.css"><script src="/home-boot.js"></script><script src="/guardian.js?v=20261025-eva-default1"></script><script src="/voice-controller.js?v=20261031-dialog06-ux"></script><script src="/language-offer.js?v=20261023-p0ruua"></script><script src="/response-stream.js"></script><link rel="stylesheet" href="/avatar.css"><script defer src="/avatar.js?v=20261025-agent-intent1"></script><script defer src="/app.auth-20261021.js?v=20261031-dialog06-ux"></script><link rel="stylesheet" href="/researcher.css"><script defer src="/researcher.js"></script><link rel="stylesheet" href="/study.css"><script defer src="/study-lesson.js"></script><script defer src="/study.js"></script><link rel="stylesheet" href="/autonomy.css"><script defer src="/autonomy.js"></script><link rel="stylesheet" href="/layout_base.css"><script defer src="/layout_base.js"></script><link rel="stylesheet" href="/layout_c.css?v=20261025-eva-brand1"><script defer src="/layout_c.js"></script><link rel="stylesheet" href="/msgactions.css?v=20261025-review1"><script defer src="/msgactions.js?v=20261025-cleanup1"></script><link rel="stylesheet" href="/home.css"><script defer src="/portrait-selector.js"></script><script defer src="/portrait-gallery.js"></script><script defer src="/home.js?v=20261025-eva-default1"></script><link rel="stylesheet" href="/composer.css?v=20261031-dialog06-ux"><script defer src="/composer.js?v=20261025-agent-pult1"></script><script defer src="/compact.js?v=20261024-r8"></script><link rel="stylesheet" href="/affect-ui.css"><script defer src="/affect-r0.js"></script><script defer src="/affect-portrait.js"></script><script defer src="/affect-ui.js"></script><script defer src="/affect-catalog.js"></script><link rel="stylesheet" href="/connections.css?v=sol1"><script defer src="/connections.js?v=sol1"></script><script defer src="/analyst.js?v=sol1"></script><link rel="stylesheet" href="/space.css?v=20261031-u07e"><script defer src="/space.js?v=20261031-u07e"></script><link rel="stylesheet" href="/home-computer.css?v=1"><script defer src="/home-computer.js?v=1"></script></head><body>
+
+<aside class="sidebar" id="sidebar"><a class="brand" href="/" aria-label="Ева — главный разговор"><span class="orb">е</span><span>REYA<small>Память · внимание · продолжение</small></span></a><button class="new" id="newTopic">＋ Новая тема</button><div class="nav-label">МОИ РАЗГОВОРЫ</div><nav id="threads" aria-label="Темы и проекты"></nav><div class="sidebar-bottom"><a href="/genesis" id="systemAgentLink">Системный агент и задачи</a><button id="memoryBtn">◇ Память</button><button id="workshopBtn">◈ Мастерская</button><button id="recoveryBtn">↻ Продолжение работы</button><button id="settingsBtn">⚙ Возможности и голос</button><div class="pilot">REYA HOME<small>История доступна после входа</small></div></div></aside>
+
+<main><header><button class="icon menu" id="menuBtn" aria-label="Открыть меню">☰</button><div><div class="eyebrow" id="breadcrumb">ОДИН РАЗГОВОР · МНОГО НОВЫХ ТЕМ</div><h1 id="threadTitle">Главный разговор</h1></div><span id="connection" class="connection">Подключение…</span><button id="mergeBtn" hidden>↩ Вернуть итог</button></header>
+
+<div id="notice" class="notice" role="status" aria-live="polite">История сохраняется в REYA. Модель помогает продолжать её.</div>
+
+<nav class="context-strip" aria-label="Состояние разговора"><button id="memoryQuick">◇ Память и источники</button><button id="actionsQuick">▣ Действия · неизвестно</button><button id="qualityQuick">◇ Не проверено</button><button id="cleanupQuick" type="button">Технические · очистка</button></nav>
+
+<section id="history" class="history" role="log" aria-label="История разговора"><div class="welcome"><span class="orb large">е</span><h2>Место, где разговор продолжается.</h2><p>Войдите через Google, чтобы открыть историю своего Person.</p></div></section>
+
+<section class="composer-area"><div id="voiceState" class="voice-state" role="status" aria-live="polite" data-mic="ready">Готов · не слушает</div><div id="attachments" class="attachments"></div><form id="compose"><textarea id="draft" aria-label="Сообщение Еве" placeholder="Расскажи мне, что у тебя на уме…" rows="3"></textarea><div class="editor-line"><span id="draftMeter"></span><button id="editorToggle" type="button" aria-expanded="false">Развернуть редактор</button></div><div class="compose-tools"><div><button type="button" id="attach" title="Фото, видео, аудио или документ">＋ <span>Вложение</span></button><button type="button" id="letter" title="Указать автора и адресата пересланного письма">✉ <span>Письмо</span></button><button type="button" id="dictate" title="Диктовка в редактируемое поле">♩ <span>Диктовка</span></button><button type="button" id="live" title="Одна фраза: пауза завершит запись. Отправка только при пустом неизменённом черновике">◉ Фраза вслух</button><button type="button" id="endRecord" hidden>Завершить запись</button><button type="button" id="cancelRecord" hidden>Отменить запись</button><button type="button" id="stopAudio" hidden>■ Голос</button><input type="file" id="files" hidden accept="image/*,audio/*,video/*,.txt,.md,.csv,.json,.html,.css,.js,.ts,.py,.yaml,.yml,.xml,.sql,.pdf,.docx"></div><button class="send" id="send" type="submit" aria-label="Отправить">Отправить ↑</button></div></form><div class="composer-note"><span id="contextNote">Полная история хранится в журнале. Контекст ответа ограничен.</span><span id="keyboardHint">Enter — новая строка · Ctrl+Enter — отправить</span></div></section>
+
+</main>
+
+<aside id="companion" class="companion" aria-label="Ева · RC3" data-state="offline">
+
+ <span class="build">REYA · RC3 DESKTOP</span>
+
+ <div class="portrait-frame"><img id="avatarPortrait" hidden alt="Локальный портрет Евы"><div class="portrait-glow"></div></div>
+
+ <h2 id="avatarName">Ева</h2>
+
+ <div class="avatar-status" role="status" aria-live="polite"><span class="avatar-dot" aria-hidden="true"></span><span id="avatarState">Нет связи</span></div>
+
+ <div class="avatar-wave" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+ <button id="avatarTalk" class="avatar-talk" disabled>Поговорить</button><button id="avatarStop">Остановить голос</button><button id="avatarSettings">Голос и язык</button>
+
+ <div class="avatar-meta"><div id="avatarThread">Разговор · main</div><small id="avatarHint">Анимация показывает состояние приложения</small></div>
+
+</aside>
+
+<dialog id="panel"><div class="panel-head"><h2 id="panelTitle"></h2><button id="closePanel" aria-label="Закрыть">✕</button></div><div id="panelBody"></div></dialog>
+
+<dialog id="branchDialog"><form id="branchForm"><h2>Дать разговору новое направление</h2><p class="muted">Тема сохранит контекст до выбранного сообщения.</p><label>Название<input id="branchName" required maxlength="120" placeholder="Например, идеи для выходных"></label><label>Тип<select id="branchKind"><option value="topic">Тема</option><option value="project">Проект</option></select></label><div class="actions"><button type="button" id="branchCancel">Отмена</button><button class="primary">Создать</button></div></form></dialog>
+
+</body></html>
+

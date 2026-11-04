@@ -1,0 +1,20 @@
+name: REYA HOME contracts
+on:
+  pull_request:
+    paths: ['integrations/reya_home/**', '.github/workflows/reya-home-contracts.yml']
+  push:
+    branches: ['astra/system-agent-evolution-r1']
+    paths: ['integrations/reya_home/**', '.github/workflows/reya-home-contracts.yml']
+permissions:
+  contents: read
+jobs:
+  portable-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 integrations/reya_home/check_contracts.py
+      - run: python3 -O integrations/reya_home/check_contracts.py
+      - run: node --check integrations/reya_home/candidate/web/genesis.js
