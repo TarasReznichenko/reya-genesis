@@ -170,10 +170,10 @@ class Ledger:
  def cancel(self,r):
   old=self.read(r.request_id);need(old is None or old['fingerprint']==r.fingerprint,'REQUEST_ID_PAYLOAD_CONFLICT')
   with self.connection() as d:
-   d.execute('BEGIN IMMEDIATE');d.execute('INSERT OR IGNORE INTO cancellations VALUES(?,?)',(r.request_id,r.fingerprint));d.execute('COMMIT')
-  need(self.cancelled(r.request_id),'CANCEL_COMMIT_UNVERIFIED')
- def cancelled(self,rid):
-  with self.connection() as d:return bool(d.execute('SELECT 1 FROM cancellations WHERE request_id=?',(rid,)).fetchone())
+   d.execute('BEGIN IMMEDIATE');d.execute('INSERT OR IGNORE INTO cancellations VALUES(?,?)',(r.request_id,r.operation_fingerprint));d.execute('COMMIT')
+  need(self.cancelled(r.request_id,r.operation_fingerprint),'CANCEL_COMMIT_UNVERIFIED')
+ def cancelled(self,rid,operation_fingerprint=None):
+  with self.connection() as d:return bool(d.execute('SELECT 1 FROM cancellations WHERE request_id=? OR fingerprint=?',(rid,operation_fingerprint)).fetchone())
  def transition(self,record,phase,**fields):
   need(phase in PHASES,'PHASE_INVALID')
   pending=json.loads(encode(record));pending.update(phase=phase,**fields)
@@ -208,7 +208,7 @@ class GuiProvider:
   self.ledger=Ledger(lab);self.authority=authority;self.gui_factory=gui;self.gui=gui;self.clipboard=clipboard
  def guard(self,r,phase,chat_id=None):
   self.authority.check(r,phase)
-  need(not self.ledger.cancelled(r.request_id),'REQUEST_CANCELLED')
+  need(not self.ledger.cancelled(r.request_id,r.operation_fingerprint),'REQUEST_CANCELLED')
   need(self.authority.provider_terms_allowed(),'PROVIDER_AUTOMATION_TERMS_NOT_VERIFIED')
   o=self.gui.observe()
   need(o.pin==r.pin,'APP_PROCESS_WINDOW_DPI_LAYOUT_DRIFT')
@@ -223,9 +223,13 @@ class GuiProvider:
   # UI observations occur outside; individual inputs own their own host fence.
   with self.authority.protect(r,phase):
    self.authority.check(r,phase)
-   need(not self.ledger.cancelled(r.request_id),'REQUEST_CANCELLED')
+   need(not self.ledger.cancelled(r.request_id,r.operation_fingerprint),'REQUEST_CANCELLED')
    need(self.authority.provider_terms_allowed(),'PROVIDER_AUTOMATION_TERMS_NOT_VERIFIED')
    yield
+ def read_saved(self,r,record):
+  with self.local_commit(r,'READ_SAVED_RESULT'):
+   need(not self.ledger.cancelled(record['request_id'],record['operation_fingerprint']),'REQUEST_CANCELLED')
+   return record['result']
  def request_cancel(self,r):
   """Trusted owner control signal; cannot erase a send already attempted."""
   r.validate()
@@ -240,14 +244,13 @@ class GuiProvider:
    if old:
     need(old['fingerprint']==r.fingerprint,'REQUEST_ID_PAYLOAD_CONFLICT')
     if old['phase']=='RESULT_SAVED':
-     self.authority.check(r,'READ_SAVED_RESULT');return old['result']
+     return self.read_saved(r,old)
     need(old['phase']=='PREPARED','PRIOR_EFFECT_RECONCILIATION_REQUIRED')
    prior=self.ledger.for_operation(r.operation_id)
    if prior and prior['request_id']!=r.request_id:
     need(prior['operation_fingerprint']==r.operation_fingerprint,'OPERATION_PAYLOAD_CONFLICT')
-    self.authority.check(r,'READ_LOGICAL_OPERATION')
     need(prior['phase']=='RESULT_SAVED','PRIOR_OPERATION_RECONCILIATION_REQUIRED')
-    return dict(prior['result'],recovered_for_request_id=r.request_id)
+    return dict(self.read_saved(r,prior),recovered_for_request_id=r.request_id)
    need(not self.ledger.unresolved(),'OTHER_PENDING_EFFECT_RECONCILE')
    self.gui=self.gui_factory.bind_request(r)  # fresh one-effect port per request
    self.guard(r,'PREPARE')
@@ -283,10 +286,10 @@ class GuiProvider:
     self.guard(r,'BEFORE_COPY',o.chat_id)
     need(answer.complete and answer.chat_id==o.chat_id and answer.model==r.model,'ANSWER_STALE_OR_INCOMPLETE')
     self.ledger.transition(rec,'ANSWER_VISIBLE',message_id=answer.message_id)
+    self.guard(r,'COPY',o.chat_id)
     self.ledger.transition(rec,'ANSWER_VISIBLE',clipboard_dirty_possible=True)
     capture=None
     try:
-     self.guard(r,'COPY',o.chat_id)
      capture=self.clipboard.copy_verified(lambda:self.gui.copy_answer(answer.message_id),answer.text_sha256,r.max_output_bytes)
      need(digest(capture.text.encode())==answer.text_sha256,'CLIPBOARD_VISIBLE_MISMATCH')
      need(len(capture.text.encode())<=r.max_output_bytes,'OUTPUT_TOO_LARGE')

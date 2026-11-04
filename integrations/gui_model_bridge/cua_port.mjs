@@ -12,7 +12,7 @@ export class CuaGuiFactory {
 export class CuaGuiPort {
   constructor(app, observer, fence, request) {
     if(!request?.request_id||!request?.pin||!['GPT-6 Astra','GPT-6.1 Terra','GPT-6.1 Sol'].includes(request.model))throw new Error('REQUEST_BINDING_REQUIRED');
-    this.app=app;this.observer=observer;this.fence=fence;this.sendUsed=false;this.chat=null;this.attached=false;
+    this.app=app;this.observer=observer;this.fence=fence;this.sendUsed=false;this.chat=null;this.attached=false;this.attachmentPin=null;
     this.binding=freeze(JSON.parse(JSON.stringify(request)));
     this.pinEncoding=stable(this.binding.pin);
   }
@@ -37,9 +37,17 @@ export class CuaGuiPort {
     // run MUST revalidate original host operation/Person/N1/STOP/revoke/cancel.
     return await this.fence.run(this.binding,name,async()=>{
     const before=await this.observe();
-    if(name==='copy_reply')await this.observer.verifyReply(before,value);
+    if(name==='copy_reply' && await this.observer.verifyReply(before,value)!==true)
+      throw new Error('REPLY_NOT_VERIFIED');
     if(name==='open_file' && await this.observer.verifyDialogPath(before,value)!==true)
       throw new Error('FILE_DIALOG_PATH_NOT_VERIFIED');
+    if(name==='send') {
+      const p=this.attachmentPin;
+      if(!p||p.chat_id!==this.chat)throw new Error('SEND_WITHOUT_VERIFIED_ATTACHMENT');
+      const a=await this.observer.attachment(before,p.path,p.sha256);
+      if(a.chat_id!==p.chat_id||a.filename!==p.filename||a.file_sha256!==p.sha256||!a.path_readback||!a.single_file||!a.composer_empty)
+        throw new Error('SEND_INPUTS_CHANGED');
+    }
     const command=await this.observer.control(before,name); // fresh AX index only
     if (command.window_id!==before.pin.window_id || command.observation!==before.observation)
       throw new Error('GUI_OBSERVATION_STALE');
@@ -53,17 +61,17 @@ export class CuaGuiPort {
   async new_chat() {
     const o=await this.step('new_chat');
     if(!o.empty_chat||!o.chat_id)throw new Error('NEW_EMPTY_CHAT_NOT_VERIFIED');
-    this.chat=o.chat_id;this.attached=false;return o;
+    this.chat=o.chat_id;this.attached=false;this.attachmentPin=null;return o;
   }
   async attach(path,sha256) {
     await this.step('plus');await this.step('add_file');await this.step('file_path',path);
     await this.step('open_file',path);const a=await this.observer.attachment(await this.observe(),path,sha256);
     if(a.chat_id!==this.chat||a.file_sha256!==sha256||a.filename!==path.split(/[\\/]/).at(-1)||!a.path_readback||!a.single_file||!a.composer_empty)throw new Error('ATTACHMENT_NOT_VERIFIED');
-    this.attached=true;return a;
+    this.attachmentPin=freeze({path,sha256,filename:a.filename,chat_id:a.chat_id});this.attached=true;return a;
   }
   async send_once(effect_id) {
     if(this.sendUsed) throw new Error('SEND_ALREADY_ATTEMPTED');
-    if(this.chat===null||!this.attached)throw new Error('SEND_WITHOUT_VERIFIED_ATTACHMENT');
+    if(this.chat===null||!this.attached||!this.attachmentPin)throw new Error('SEND_WITHOUT_VERIFIED_ATTACHMENT');
     this.sendUsed=true; // must be set BEFORE the CUA call, including timeout
     const after=await this.step('send');return await this.observer.sendReceipt(after,effect_id);
   }

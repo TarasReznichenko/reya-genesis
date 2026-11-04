@@ -52,7 +52,7 @@ class FixtureGUI:
  @contextmanager
  def input(self,phase):
   with self.a.protect(self.r,phase):
-   need(not self.cancelled(self.r.request_id),'REQUEST_CANCELLED');yield
+   need(not self.cancelled(self.r.request_id,self.r.operation_fingerprint),'REQUEST_CANCELLED');yield
  def new_chat(self):
   with self.input('NEW_CHAT_INPUT'):self.o=replace(self.o,empty_chat=True)
  def attach(self,p,h):
@@ -245,5 +245,26 @@ class Tests(unittest.TestCase):
     persisted=p.ledger.read(r.request_id)
     self.assertTrue(intervened);self.assertEqual(persisted['phase'],'ANSWER_COPIED_VERIFIED')
     self.assertNotIn('result',persisted);self.assertEqual(g.sends,1)
+ def test_cancelled_saved_operation_blocks_original_and_retry_alias(self):
+  for cancel_alias in (False,True):
+   with self.subTest(cancel_alias=cancel_alias):
+    r,a,c,g,p=self.fixture();p.call(r);alias=replace(r,request_id=str(uuid.uuid4()))
+    p.request_cancel(alias if cancel_alias else r)
+    self.denied(p,r,'REQUEST_CANCELLED');self.denied(p,alias,'REQUEST_CANCELLED')
+    self.assertEqual((g.sends,g.copies),(1,1))
+ def test_copy_guard_control_failure_never_emits_clipboard_restore_warning(self):
+  for control in ('stop','revoke','cancel'):
+   with self.subTest(control=control):
+    r,a,c,g,p=self.fixture();check=a.check
+    def intervene(req,phase):
+     if phase=='COPY':
+      if control=='stop':a.stop=True
+      elif control=='revoke':a.revoked=True
+      else:p.ledger.cancel(r)
+     return check(req,phase)
+    a.check=intervene
+    self.denied(p,r,dict(stop='OWNER_STOP',revoke='OWNER_REVOKED',cancel='REQUEST_CANCELLED')[control])
+    self.assertEqual(g.copies,0);self.assertEqual(g.alerts,[])
+    rec=p.ledger.read(r.request_id);self.assertIsNone(rec['clipboard_alert']);self.assertNotIn('clipboard_dirty_possible',rec)
 
 if __name__=='__main__':unittest.main(verbosity=2)
