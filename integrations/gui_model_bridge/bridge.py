@@ -155,14 +155,17 @@ class Ledger:
     with closing(sqlite3.connect(self.db.as_uri()+'?mode=ro',uri=True,timeout=2)) as d:
      version=d.execute('PRAGMA user_version').fetchone()[0]
      columns=[row[1] for row in d.execute('PRAGMA table_info(cancellations)')]
-     need(version==1 and columns==['request_id','operation_id'],'LEDGER_SCHEMA_UPGRADE_REQUIRED')
+     bindings=[row[1] for row in d.execute('PRAGMA table_info(request_bindings)')]
+     need(version==2 and columns==['request_id','operation_id'] and bindings==['request_id','operation_id','fingerprint'],'LEDGER_SCHEMA_UPGRADE_REQUIRED')
    except sqlite3.DatabaseError:raise Blocked('LEDGER_UNREADABLE_RECONCILE') from None
   with self.connection() as d:
    d.execute('BEGIN IMMEDIATE')
    d.execute('CREATE TABLE IF NOT EXISTS effects(request_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, phase TEXT NOT NULL, record_json TEXT NOT NULL)')
    d.execute("CREATE TRIGGER IF NOT EXISTS immutable_effect_ids BEFORE UPDATE OF request_id,operation_id ON effects WHEN OLD.request_id IS NOT NEW.request_id OR OLD.operation_id IS NOT NEW.operation_id BEGIN SELECT RAISE(ABORT,'IMMUTABLE_EFFECT_IDENTITY'); END")
    d.execute('CREATE TABLE IF NOT EXISTS cancellations(request_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL)')
-   d.execute('PRAGMA user_version=1');d.execute('COMMIT')
+   d.execute('CREATE TABLE IF NOT EXISTS request_bindings(request_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL, fingerprint TEXT NOT NULL)')
+   d.execute("CREATE TRIGGER IF NOT EXISTS immutable_request_binding BEFORE UPDATE ON request_bindings BEGIN SELECT RAISE(ABORT,'IMMUTABLE_REQUEST_BINDING'); END")
+   d.execute('PRAGMA user_version=2');d.execute('COMMIT')
  @contextmanager
  def connection(self):
   need(not self.db.is_symlink(),'LAB_PATH_UNSAFE')
@@ -188,12 +191,23 @@ class Ledger:
  def for_operation(self,operation_id):
   with self.connection() as d:row=d.execute('SELECT record_json FROM effects WHERE operation_id=?',(operation_id,)).fetchone()
   return json.loads(row[0]) if row else None
+ def _bind(self,d,r):
+  row=d.execute('SELECT operation_id,fingerprint FROM request_bindings WHERE request_id=?',(r.request_id,)).fetchone()
+  need(row is None or row==(r.operation_id,r.fingerprint),'REQUEST_ID_PAYLOAD_CONFLICT')
+  d.execute('INSERT OR IGNORE INTO request_bindings VALUES(?,?,?)',(r.request_id,r.operation_id,r.fingerprint))
+ def bind(self,r):
+  # Includes recovery aliases: a used retry UUID cannot become a new intent.
+  with self.connection() as d:
+   d.execute('BEGIN IMMEDIATE');self._bind(d,r);d.execute('COMMIT')
+  with self.connection() as d:
+   need(d.execute('SELECT operation_id,fingerprint FROM request_bindings WHERE request_id=?',(r.request_id,)).fetchone()==(r.operation_id,r.fingerprint),'REQUEST_BINDING_COMMIT_UNVERIFIED')
  def cancel(self,r):
   old=self.read(r.request_id);need(old is None or old['fingerprint']==r.fingerprint,'REQUEST_ID_PAYLOAD_CONFLICT')
   with self.connection() as d:
    d.execute('BEGIN IMMEDIATE')
    row=d.execute('SELECT operation_id FROM cancellations WHERE request_id=?',(r.request_id,)).fetchone()
    need(row is None or row[0]==r.operation_id,'REQUEST_ID_OPERATION_CONFLICT')
+   self._bind(d,r)
    d.execute('INSERT OR IGNORE INTO cancellations VALUES(?,?)',(r.request_id,r.operation_id));d.execute('COMMIT')
   need(self.cancelled(r.request_id,r.operation_id),'CANCEL_COMMIT_UNVERIFIED')
  def cancelled(self,rid,operation_id=None):
@@ -267,6 +281,7 @@ class GuiProvider:
   # cannot cross this API. No route/default/council is registered here.
   raw=r.render();need(0<timeout_s<=120,'TIMEOUT_INVALID')
   with self.ledger.lock():
+   with self.local_commit(r,'BIND_REQUEST'):self.ledger.bind(r)
    old=self.ledger.read(r.request_id)
    if old:
     need(old['fingerprint']==r.fingerprint,'REQUEST_ID_PAYLOAD_CONFLICT')
@@ -328,10 +343,13 @@ class GuiProvider:
     except ClipboardSafeFailure as e:
      self.ledger.annotate_error(r.request_id,e.code,clipboard_state=e.disposition)
      raise
-    except Exception:
+    except Exception as e:
      if capture is None:
       self.ledger.annotate_error(r.request_id,'CLIPBOARD_RESTORE_UNVERIFIED','CLIPBOARD_RESTORE_UNVERIFIED')
       self.gui.alert('CLIPBOARD_RESTORE_UNVERIFIED')
+     else:
+      # Custodian return proves restoration, independently of answer validity.
+      self.ledger.annotate_error(r.request_id,e.code if isinstance(e,Blocked) else 'PORT_FAILURE_NO_RETRY',clipboard_state='RESTORED')
      raise
     self.ledger.transition(rec,'ANSWER_COPIED_VERIFIED',clipboard_dirty_possible=False)
     result=dict(content=v['answer'],model=r.model,provider='chatbot_plus_gui',request_id=r.request_id,operation_id=r.operation_id,

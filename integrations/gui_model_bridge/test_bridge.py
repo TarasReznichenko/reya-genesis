@@ -324,5 +324,25 @@ class Tests(unittest.TestCase):
   c.copy_verified=restored_failure;self.denied(p,r,'SYNTHETIC_CAPTURE_REJECTED')
   rec=p.ledger.read(r.request_id);self.assertFalse(rec['clipboard_dirty_possible']);self.assertEqual(rec['clipboard_disposition'],'RESTORED')
   self.assertEqual(g.alerts,[]);self.assertEqual(c.text,'SYNTHETIC_USER_CLIPBOARD_724');self.assertNotIn('result',rec)
+ def test_recovery_alias_cannot_rebind_operation_in_call_or_cancel_after_restart(self):
+  r,a,c,g,p=self.fixture();p.call(r);alias=replace(r,request_id=str(uuid.uuid4()));p.call(alias)
+  restarted=GuiProvider(p.ledger.root,a,g,c);g.cancelled=restarted.ledger.cancelled
+  rebound=replace(alias,operation_id=str(uuid.uuid4()),sources=(Source('other.txt','SYNTHETIC','SYNTHETIC different intent'),))
+  self.denied(restarted,rebound,'REQUEST_ID_PAYLOAD_CONFLICT')
+  with self.assertRaises(Blocked) as e:restarted.request_cancel(rebound)
+  self.assertEqual(e.exception.code,'REQUEST_ID_PAYLOAD_CONFLICT');self.assertEqual(g.sends,1)
+  self.assertEqual(restarted.call(alias)['operation_id'],r.operation_id)
+  with restarted.ledger.connection() as d:
+   with self.assertRaises(sqlite3.IntegrityError):d.execute('UPDATE request_bindings SET operation_id=? WHERE request_id=?',(rebound.operation_id,alias.request_id))
+ def test_restored_invalid_answer_preserves_cleanup_state_without_result(self):
+  for malformed in (True,False):
+   with self.subTest(malformed=malformed):
+    r,a,c,g,p=self.fixture()
+    if malformed:g.answer=lambda:'SYNTHETIC_NOT_JSON'
+    else:
+     g.bad_answer=True;bad=g.answer();g.answer=lambda:bad
+    self.denied(p,r,'ANSWER_ENVELOPE_INVALID' if malformed else 'ANSWER_REQUEST_CORRELATION_FAILED')
+    rec=p.ledger.read(r.request_id);self.assertFalse(rec['clipboard_dirty_possible']);self.assertEqual(rec['clipboard_disposition'],'RESTORED')
+    self.assertNotIn('result',rec);self.assertEqual(g.alerts,[]);self.assertEqual(c.text,'SYNTHETIC_USER_CLIPBOARD_724')
 
 if __name__=='__main__':unittest.main(verbosity=2)
