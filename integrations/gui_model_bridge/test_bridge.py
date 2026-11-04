@@ -26,8 +26,11 @@ class FixtureClip:
  def copy_verified(self,copy_ui,visible_sha256,max_bytes):
   # SYNTHETIC custodian: a real implementation needs native write ownership,
   # all-format preservation and crash-surviving custody. Not provided here.
-  before=retry_clipboard(self.snapshot_private)
-  copy_ui();capture=self.read()
+  try:before=retry_clipboard(self.snapshot_private)
+  except Blocked as e:raise ClipboardSafeFailure(e.code,'NO_WRITE') from None
+  try:copy_ui()
+  except InputNotAdmitted as e:raise ClipboardSafeFailure(e.code,'NO_WRITE') from None
+  capture=self.read()
   need(digest(capture.text.encode())==visible_sha256,'CLIPBOARD_VISIBLE_MISMATCH')
   try:restored=retry_clipboard(lambda:self.restore_verified(before,capture.sequence))
   except Blocked:restored=False
@@ -52,7 +55,7 @@ class FixtureGUI:
  @contextmanager
  def input(self,phase):
   with self.a.protect(self.r,phase):
-   need(not self.cancelled(self.r.request_id,self.r.operation_fingerprint),'REQUEST_CANCELLED');yield
+   need(not self.cancelled(self.r.request_id,self.r.operation_id),'REQUEST_CANCELLED');yield
  def new_chat(self):
   with self.input('NEW_CHAT_INPUT'):self.o=replace(self.o,empty_chat=True)
  def attach(self,p,h):
@@ -72,8 +75,14 @@ class FixtureGUI:
   if self.timeout:raise TimeoutError('SYNTHETIC response timeout')
   return VisibleAnswer('stale-chat' if self.changed_chat else self.chat,'fixture-reply',self.r.model,digest(self.answer().encode()),True)
  def copy_answer(self,message_id):
-  with self.input('COPY_INPUT'):
-   self.copies+=1;self.c.text='SYNTHETIC_OTHER_COPY' if self.bad_clip else self.answer();self.c.seq+=1
+  admitted=False
+  try:
+   with self.input('COPY_INPUT'):
+    admitted=True
+    self.copies+=1;self.c.text='SYNTHETIC_OTHER_COPY' if self.bad_clip else self.answer();self.c.seq+=1
+  except Blocked as e:
+   if not admitted:raise InputNotAdmitted(e.code) from None
+   raise
  def alert(self,code):self.alerts.append(code)
 
 class Tests(unittest.TestCase):
@@ -273,5 +282,47 @@ class Tests(unittest.TestCase):
   r,a,c,g,p=self.fixture();self.denied(p,replace(r,sources=list(r.sources)),'REQUEST_CONTAINER_INVALID')
   self.denied(p,replace(r,pin=replace(PIN,bounds=list(PIN.bounds))),'APP_PIN_INVALID')
   self.assertEqual(g.sends,0);self.assertEqual(list(p.ledger.root.glob('*.txt')),[])
+ def test_pre_call_cancel_survives_retry_uuid_and_changed_limits_or_payload(self):
+  r,a,c,g,p=self.fixture();p.request_cancel(r)
+  for changes in ({'max_output_bytes':1024},{'sources':(Source('other.txt','SYNTHETIC','SYNTHETIC changed'),)}):
+   self.denied(p,replace(r,request_id=str(uuid.uuid4()),**changes),'REQUEST_CANCELLED')
+  self.assertEqual(g.sends,0);self.assertEqual(list(p.ledger.root.glob('*.txt')),[])
+ def test_cancel_request_id_cannot_be_rebound_before_first_call(self):
+  r,a,c,g,p=self.fixture();p.request_cancel(r)
+  with self.assertRaises(Blocked) as e:p.request_cancel(replace(r,operation_id=str(uuid.uuid4())))
+  self.assertEqual(e.exception.code,'REQUEST_ID_OPERATION_CONFLICT')
+  self.assertTrue(p.ledger.cancelled(str(uuid.uuid4()),r.operation_id))
+ def test_legacy_ledger_requires_explicit_reconciliation_without_mutation(self):
+  with tempfile.TemporaryDirectory() as folder:
+   path=Path(folder)/'GUI_EFFECTS.sqlite3'
+   with closing(sqlite3.connect(path)) as d:
+    with d:
+     d.execute('CREATE TABLE cancellations(request_id TEXT PRIMARY KEY,operation_fingerprint TEXT)')
+     d.execute('CREATE TABLE effects(phase TEXT)');d.execute("INSERT INTO effects VALUES('UNKNOWN')")
+   before=path.read_bytes()
+   with self.assertRaises(Blocked) as e:Ledger(folder)
+   self.assertEqual(e.exception.code,'LEDGER_SCHEMA_UPGRADE_REQUIRED');self.assertEqual(path.read_bytes(),before)
+ def test_copy_input_control_rejection_proves_no_clipboard_write(self):
+  for control in ('stop','revoke','cancel'):
+   with self.subTest(control=control):
+    r,a,c,g,p=self.fixture();check=a.check
+    def intervene(req,phase):
+     if phase=='COPY_INPUT':
+      if control=='stop':a.stop=True
+      elif control=='revoke':a.revoked=True
+      else:p.ledger.cancel(r)
+     return check(req,phase)
+    a.check=intervene
+    self.denied(p,r,dict(stop='OWNER_STOP',revoke='OWNER_REVOKED',cancel='REQUEST_CANCELLED')[control])
+    self.assertEqual(g.copies,0);self.assertEqual(g.alerts,[]);self.assertEqual(c.text,'SYNTHETIC_USER_CLIPBOARD_724')
+    rec=p.ledger.read(r.request_id);self.assertFalse(rec['clipboard_dirty_possible']);self.assertEqual(rec['clipboard_disposition'],'NO_WRITE')
+    self.assertNotIn('result',rec)
+ def test_verified_restored_custodian_failure_has_no_false_dirty_warning(self):
+  r,a,c,g,p=self.fixture();copy=c.copy_verified
+  def restored_failure(*args):
+   copy(*args);raise ClipboardSafeFailure('SYNTHETIC_CAPTURE_REJECTED','RESTORED')
+  c.copy_verified=restored_failure;self.denied(p,r,'SYNTHETIC_CAPTURE_REJECTED')
+  rec=p.ledger.read(r.request_id);self.assertFalse(rec['clipboard_dirty_possible']);self.assertEqual(rec['clipboard_disposition'],'RESTORED')
+  self.assertEqual(g.alerts,[]);self.assertEqual(c.text,'SYNTHETIC_USER_CLIPBOARD_724');self.assertNotIn('result',rec)
 
 if __name__=='__main__':unittest.main(verbosity=2)

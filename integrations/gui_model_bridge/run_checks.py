@@ -5,7 +5,7 @@ R=Path(__file__).resolve().parent;O=R/'receipts';O.mkdir(exist_ok=True)
 files=('bridge.py','cua_port.mjs','test_bridge.py','test_cua_port.mjs','run_checks.py')
 sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest();before={n:sha(R/n) for n in files}
 flags=0x08000000 if sys.platform=='win32' else 0
-r=subprocess.run([sys.executable,'-B','-m','unittest','-v','test_bridge'],cwd=R,capture_output=True,text=True,encoding='utf-8',timeout=30,creationflags=flags)
+r=subprocess.run([sys.executable,'-X','utf8','-B','-m','unittest','-v','test_bridge'],cwd=R,capture_output=True,text=True,encoding='utf-8',timeout=30,creationflags=flags)
 j=subprocess.run(['node','--test','test_cua_port.mjs'],cwd=R,capture_output=True,text=True,encoding='utf-8',timeout=15,creationflags=flags)
 if before!={n:sha(R/n) for n in files}:raise SystemExit('SOURCE_BYTES_CHANGED_DURING_TEST')
 name='TEST-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S')

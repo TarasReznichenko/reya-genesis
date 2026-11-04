@@ -32,10 +32,13 @@ export class CuaGuiPort {
     return o;
   }
   async step(name, value) {
+    let attempted=false;
+    try {
     if(!this.fence?.run)throw new Error('HOST_CP_FENCE_NOT_BOUND');
     // Sole fence for this ONE input; caller never holds an outer fence.
     // run MUST revalidate original host operation/Person/N1/STOP/revoke/cancel.
     return await this.fence.run(this.binding,name,async()=>{
+    if(attempted)throw new Error('GUI_INPUT_ALREADY_ATTEMPTED');
     const before=await this.observe();
     if(name==='copy_reply' && await this.observer.verifyReply(before,value)!==true)
       throw new Error('REPLY_NOT_VERIFIED');
@@ -51,12 +54,18 @@ export class CuaGuiPort {
     const command=await this.observer.control(before,name); // fresh AX index only
     if (command.window_id!==before.pin.window_id || command.observation!==before.observation)
       throw new Error('GUI_OBSERVATION_STALE');
-    if (command.kind==='click') await this.app.click(command.element);
-    else if (command.kind==='file_path' && name==='file_path' && typeof value==='string')
-      await this.app.setValue(command.element,value);
+    if (command.kind==='click') {attempted=true;await this.app.click(command.element);}
+    else if (command.kind==='file_path' && name==='file_path' && typeof value==='string') {
+      attempted=true;await this.app.setValue(command.element,value);}
     else throw new Error('GUI_ACTION_UNSUPPORTED');
     return await this.observe(); // one action, then fresh state; no automatic retry
     });
+    } catch(cause) {
+      // Only the trusted in-process binding may map this marker to Python
+      // InputNotAdmitted. A timeout after input stays potentially effectful.
+      const code=/^[A-Z0-9_]{1,90}$/.test(cause?.message)?cause.message:'GUI_PORT_FAILURE';
+      const error=new Error(code);error.input_not_admitted=!attempted;throw error;
+    }
   }
   async new_chat() {
     const o=await this.step('new_chat');

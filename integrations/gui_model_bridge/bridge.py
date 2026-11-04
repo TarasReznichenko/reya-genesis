@@ -21,6 +21,12 @@ class Blocked(Exception):
 def need(ok,code):
  if not ok:raise Blocked(code)
 class ClipboardBusy(Exception):pass
+class InputNotAdmitted(Blocked):
+ """Trusted GUI port proves it rejected BEFORE attempting its input."""
+class ClipboardSafeFailure(Blocked):
+ def __init__(self,code,disposition):
+  need(disposition in ('NO_WRITE','RESTORED'),'CLIPBOARD_DISPOSITION_INVALID')
+  super().__init__(code);self.disposition=disposition
 def retry_clipboard(fn):
  for attempt in range(3):
   try:return fn()
@@ -129,6 +135,8 @@ class Clipboard(Protocol):
   its own UI write by producer+sequence, read, restore only its own write/CAS,
   verify all formats. Survive caller crash or alert. No private snapshot export.
   Returns text only AFTER verified restoration. Missing protocol MUST deny.
+  A proven no-write rejection or verified-restored failure MUST raise
+  ClipboardSafeFailure. Unknown or potentially delayed writes MUST NOT.
   """
 class DenyUnboundAuthority:
  """The only supplied real-host default. Fixture authority lives in tests only."""
@@ -142,10 +150,19 @@ class Ledger:
   need(not self.root.is_symlink(),'LAB_PATH_UNSAFE')
   self.db=self.root/'GUI_EFFECTS.sqlite3'
   need(not self.db.is_symlink(),'LAB_PATH_UNSAFE')
+  if self.db.exists():
+   try:
+    with closing(sqlite3.connect(self.db.as_uri()+'?mode=ro',uri=True,timeout=2)) as d:
+     version=d.execute('PRAGMA user_version').fetchone()[0]
+     columns=[row[1] for row in d.execute('PRAGMA table_info(cancellations)')]
+     need(version==1 and columns==['request_id','operation_id'],'LEDGER_SCHEMA_UPGRADE_REQUIRED')
+   except sqlite3.DatabaseError:raise Blocked('LEDGER_UNREADABLE_RECONCILE') from None
   with self.connection() as d:
+   d.execute('BEGIN IMMEDIATE')
    d.execute('CREATE TABLE IF NOT EXISTS effects(request_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, phase TEXT NOT NULL, record_json TEXT NOT NULL)')
    d.execute("CREATE TRIGGER IF NOT EXISTS immutable_effect_ids BEFORE UPDATE OF request_id,operation_id ON effects WHEN OLD.request_id IS NOT NEW.request_id OR OLD.operation_id IS NOT NEW.operation_id BEGIN SELECT RAISE(ABORT,'IMMUTABLE_EFFECT_IDENTITY'); END")
-   d.execute('CREATE TABLE IF NOT EXISTS cancellations(request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL)')
+   d.execute('CREATE TABLE IF NOT EXISTS cancellations(request_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL)')
+   d.execute('PRAGMA user_version=1');d.execute('COMMIT')
  @contextmanager
  def connection(self):
   need(not self.db.is_symlink(),'LAB_PATH_UNSAFE')
@@ -174,17 +191,20 @@ class Ledger:
  def cancel(self,r):
   old=self.read(r.request_id);need(old is None or old['fingerprint']==r.fingerprint,'REQUEST_ID_PAYLOAD_CONFLICT')
   with self.connection() as d:
-   d.execute('BEGIN IMMEDIATE');d.execute('INSERT OR IGNORE INTO cancellations VALUES(?,?)',(r.request_id,r.operation_fingerprint));d.execute('COMMIT')
-  need(self.cancelled(r.request_id,r.operation_fingerprint),'CANCEL_COMMIT_UNVERIFIED')
- def cancelled(self,rid,operation_fingerprint=None):
-  with self.connection() as d:return bool(d.execute('SELECT 1 FROM cancellations WHERE request_id=? OR fingerprint=?',(rid,operation_fingerprint)).fetchone())
+   d.execute('BEGIN IMMEDIATE')
+   row=d.execute('SELECT operation_id FROM cancellations WHERE request_id=?',(r.request_id,)).fetchone()
+   need(row is None or row[0]==r.operation_id,'REQUEST_ID_OPERATION_CONFLICT')
+   d.execute('INSERT OR IGNORE INTO cancellations VALUES(?,?)',(r.request_id,r.operation_id));d.execute('COMMIT')
+  need(self.cancelled(r.request_id,r.operation_id),'CANCEL_COMMIT_UNVERIFIED')
+ def cancelled(self,rid,operation_id=None):
+  with self.connection() as d:return bool(d.execute('SELECT 1 FROM cancellations WHERE request_id=? OR operation_id=?',(rid,operation_id)).fetchone())
  def transition(self,record,phase,**fields):
   need(phase in PHASES,'PHASE_INVALID')
   pending=json.loads(encode(record));pending.update(phase=phase,**fields)
   pending['events'].append(dict(phase=phase,time_ns=time.time_ns()))
   self.save(pending)
   record.clear();record.update(pending)  # advance memory only after verified commit
- def annotate_error(self,rid,code,clipboard_alert=None):
+ def annotate_error(self,rid,code,clipboard_alert=None,clipboard_state=None):
   # Annotation is never a retry of an uncommitted state/result transition.
   with self.connection() as d:
    d.execute('BEGIN IMMEDIATE')
@@ -192,6 +212,9 @@ class Ledger:
    need(row is not None,'ERROR_RECORD_NOT_FOUND');current=json.loads(row[0])
    current.update(last_error=code,error_time_ns=time.time_ns())
    if clipboard_alert is not None:current['clipboard_alert']=clipboard_alert
+   if clipboard_state is not None:
+    need(clipboard_state in ('NO_WRITE','RESTORED'),'CLIPBOARD_DISPOSITION_INVALID')
+    current.update(clipboard_disposition=clipboard_state,clipboard_dirty_possible=False,clipboard_alert=None)
    d.execute('UPDATE effects SET record_json=? WHERE request_id=?',(encode(current).decode(),rid))
    d.execute('COMMIT')
  @contextmanager
@@ -212,7 +235,7 @@ class GuiProvider:
   self.ledger=Ledger(lab);self.authority=authority;self.gui_factory=gui;self.gui=gui;self.clipboard=clipboard
  def guard(self,r,phase,chat_id=None):
   self.authority.check(r,phase)
-  need(not self.ledger.cancelled(r.request_id,r.operation_fingerprint),'REQUEST_CANCELLED')
+  need(not self.ledger.cancelled(r.request_id,r.operation_id),'REQUEST_CANCELLED')
   need(self.authority.provider_terms_allowed(),'PROVIDER_AUTOMATION_TERMS_NOT_VERIFIED')
   o=self.gui.observe()
   need(o.pin==r.pin,'APP_PROCESS_WINDOW_DPI_LAYOUT_DRIFT')
@@ -227,12 +250,12 @@ class GuiProvider:
   # UI observations occur outside; individual inputs own their own host fence.
   with self.authority.protect(r,phase):
    self.authority.check(r,phase)
-   need(not self.ledger.cancelled(r.request_id,r.operation_fingerprint),'REQUEST_CANCELLED')
+   need(not self.ledger.cancelled(r.request_id,r.operation_id),'REQUEST_CANCELLED')
    need(self.authority.provider_terms_allowed(),'PROVIDER_AUTOMATION_TERMS_NOT_VERIFIED')
    yield
  def read_saved(self,r,record):
   with self.local_commit(r,'READ_SAVED_RESULT'):
-   need(not self.ledger.cancelled(record['request_id'],record['operation_fingerprint']),'REQUEST_CANCELLED')
+   need(not self.ledger.cancelled(record['request_id'],record['operation_id']),'REQUEST_CANCELLED')
    return record['result']
  def request_cancel(self,r):
   """Trusted owner control signal; cannot erase a send already attempted."""
@@ -302,6 +325,9 @@ class GuiProvider:
      need(type(v) is dict and set(v)=={'request_id','payload_sha256','answer'},'ANSWER_ENVELOPE_INVALID')
      need(v['request_id']==r.request_id and v['payload_sha256']==r.payload_sha256,'ANSWER_REQUEST_CORRELATION_FAILED')
      need(type(v['answer']) is str and bool(v['answer']),'ANSWER_EMPTY')
+    except ClipboardSafeFailure as e:
+     self.ledger.annotate_error(r.request_id,e.code,clipboard_state=e.disposition)
+     raise
     except Exception:
      if capture is None:
       self.ledger.annotate_error(r.request_id,'CLIPBOARD_RESTORE_UNVERIFIED','CLIPBOARD_RESTORE_UNVERIFIED')
