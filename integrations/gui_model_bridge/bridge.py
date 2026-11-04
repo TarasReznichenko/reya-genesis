@@ -175,9 +175,21 @@ class Ledger:
  def cancelled(self,rid):
   with self.connection() as d:return bool(d.execute('SELECT 1 FROM cancellations WHERE request_id=?',(rid,)).fetchone())
  def transition(self,record,phase,**fields):
-  need(phase in PHASES,'PHASE_INVALID');record.update(phase=phase,**fields)
-  record['events'].append(dict(phase=phase,time_ns=time.time_ns()))
-  self.save(record)
+  need(phase in PHASES,'PHASE_INVALID')
+  pending=json.loads(encode(record));pending.update(phase=phase,**fields)
+  pending['events'].append(dict(phase=phase,time_ns=time.time_ns()))
+  self.save(pending)
+  record.clear();record.update(pending)  # advance memory only after verified commit
+ def annotate_error(self,rid,code,clipboard_alert=None):
+  # Annotation is never a retry of an uncommitted state/result transition.
+  with self.connection() as d:
+   d.execute('BEGIN IMMEDIATE')
+   row=d.execute('SELECT record_json FROM effects WHERE request_id=?',(rid,)).fetchone()
+   need(row is not None,'ERROR_RECORD_NOT_FOUND');current=json.loads(row[0])
+   current.update(last_error=code,error_time_ns=time.time_ns())
+   if clipboard_alert is not None:current['clipboard_alert']=clipboard_alert
+   d.execute('UPDATE effects SET record_json=? WHERE request_id=?',(encode(current).decode(),rid))
+   d.execute('COMMIT')
  @contextmanager
  def lock(self):
   # A crashed owner leaves this lock. Never guess that a PID/timeout frees it.
@@ -285,7 +297,7 @@ class GuiProvider:
      need(type(v['answer']) is str and bool(v['answer']),'ANSWER_EMPTY')
     except Exception:
      if capture is None:
-      rec['clipboard_alert']='CLIPBOARD_RESTORE_UNVERIFIED';self.ledger.save(rec)
+      self.ledger.annotate_error(r.request_id,'CLIPBOARD_RESTORE_UNVERIFIED','CLIPBOARD_RESTORE_UNVERIFIED')
       self.gui.alert('CLIPBOARD_RESTORE_UNVERIFIED')
      raise
     self.ledger.transition(rec,'ANSWER_COPIED_VERIFIED',clipboard_dirty_possible=False)
@@ -298,5 +310,6 @@ class GuiProvider:
     with self.local_commit(r,'FINAL_LOCAL_COMMIT'):self.ledger.transition(rec,'RESULT_SAVED',result=result)
     return result
    except Exception as e:
-    rec['last_error']=e.code if isinstance(e,Blocked) else 'PORT_FAILURE_NO_RETRY'
-    self.ledger.save(rec);raise
+    try:self.ledger.annotate_error(r.request_id,e.code if isinstance(e,Blocked) else 'PORT_FAILURE_NO_RETRY')
+    except Exception:raise Blocked('LEDGER_ERROR_ANNOTATION_UNVERIFIED') from None
+    raise

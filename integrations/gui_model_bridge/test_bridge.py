@@ -224,5 +224,26 @@ class Tests(unittest.TestCase):
    with self.subTest(model=model):
     r,a,c,g,p=self.fixture();r=replace(r,model=model);g.o=replace(g.o,model=model)
     self.assertEqual(p.call(r)['model'],model);self.assertEqual(g.sends,1)
+ def test_failed_final_save_does_not_retry_result_after_revoke_or_cancel(self):
+  for control in ('revoke','cancel'):
+   with self.subTest(control=control):
+    r,a,c,g,p=self.fixture();save=p.ledger.save;annotate=p.ledger.annotate_error;failed=False;intervened=False
+    def fail_before_commit(rec):
+     nonlocal failed
+     if rec['phase']=='RESULT_SAVED' and not failed:
+      failed=True;raise sqlite3.OperationalError('SYNTHETIC_PRE_COMMIT_FAILURE')
+     return save(rec)
+    def control_between_fence_and_annotation(rid,code,clipboard_alert=None):
+     nonlocal intervened
+     if not intervened:
+      intervened=True
+      if control=='revoke':a.revoked=True
+      else:p.request_cancel(r)
+     return annotate(rid,code,clipboard_alert)
+    p.ledger.save=fail_before_commit;p.ledger.annotate_error=control_between_fence_and_annotation
+    with self.assertRaises(sqlite3.OperationalError):p.call(r)
+    persisted=p.ledger.read(r.request_id)
+    self.assertTrue(intervened);self.assertEqual(persisted['phase'],'ANSWER_COPIED_VERIFIED')
+    self.assertNotIn('result',persisted);self.assertEqual(g.sends,1)
 
 if __name__=='__main__':unittest.main(verbosity=2)

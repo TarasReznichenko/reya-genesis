@@ -38,6 +38,8 @@ export class CuaGuiPort {
     return await this.fence.run(this.binding,name,async()=>{
     const before=await this.observe();
     if(name==='copy_reply')await this.observer.verifyReply(before,value);
+    if(name==='open_file' && await this.observer.verifyDialogPath(before,value)!==true)
+      throw new Error('FILE_DIALOG_PATH_NOT_VERIFIED');
     const command=await this.observer.control(before,name); // fresh AX index only
     if (command.window_id!==before.pin.window_id || command.observation!==before.observation)
       throw new Error('GUI_OBSERVATION_STALE');
@@ -55,8 +57,7 @@ export class CuaGuiPort {
   }
   async attach(path,sha256) {
     await this.step('plus');await this.step('add_file');await this.step('file_path',path);
-    if(await this.observer.verifyDialogPath(await this.observe(),path)!==true)throw new Error('FILE_DIALOG_PATH_NOT_VERIFIED');
-    await this.step('open_file');const a=await this.observer.attachment(await this.observe(),path,sha256);
+    await this.step('open_file',path);const a=await this.observer.attachment(await this.observe(),path,sha256);
     if(a.chat_id!==this.chat||a.file_sha256!==sha256||a.filename!==path.split(/[\\/]/).at(-1)||!a.path_readback||!a.single_file||!a.composer_empty)throw new Error('ATTACHMENT_NOT_VERIFIED');
     this.attached=true;return a;
   }

@@ -15,7 +15,7 @@ python -B verify_manifest.py
 python -B run_checks.py
 ```
 
-Run from this directory. The test runner writes an ignored receipt with source hashes, outputs and exit codes. The baseline has 33 Python tests and 11 JavaScript tests. UI, identity, N1, provider response and clipboard are synthetic ports; local files, SQLite transactions and an abrupt child process exit are real isolated fixtures. This does not prove actual desktop automation, account authorization, hardware power-loss recovery, or production acceptance.
+Run from this directory. The test runner writes an ignored receipt with source hashes, outputs and exit codes. The baseline has 34 Python tests and 13 JavaScript tests. UI, identity, N1, provider response and clipboard are synthetic ports; local files, SQLite transactions and an abrupt child process exit are real isolated fixtures. This does not prove actual desktop automation, account authorization, hardware power-loss recovery, or production acceptance.
 
 Negative cases cover app/process/window/DPI/layout/model drift, wrong foreground/locked session, expired login (`REQUIRES_OWNER_LOGIN`), unknown entitlement/terms, private source kind, rejected/tampered attachments, STOP/revocation/cancellation, concurrent writers, clipboard races/contention/restore failure, stale replies, uncertain Sends and duplicate result recovery. All three model labels are exercised only in synthetic contracts.
 
@@ -28,12 +28,12 @@ Negative cases cover app/process/window/DPI/layout/model drift, wrong foreground
 
 The only supplied real-host authority **denies dispatch**. Synthetic ports in tests cannot substitute for it. PUBLIC_SOURCE and SYNTHETIC labels do not self-authorize content: the real host must attest provenance and scope. Output is untrusted model data, never authority.
 
-Each actual CUA input owns the host fence independently. Python holds no fence across a GUI observation or compound UI operation. A bounded local result commit is serialized with revoke; clipboard restoration is mandatory custody cleanup. A cooperative file lock does not replace host-wide authority. Durability assumes SQLite's OS/VFS/storage synchronization contract, not arbitrary disk or database tampering protection.
+Each actual CUA input owns the host fence independently. The expected dialog path is revalidated inside the Open fence before its click; the real host must also keep staged bytes immutable through attachment. Python holds no fence across a GUI observation or compound UI operation. A bounded local result commit is serialized with revoke; clipboard restoration is mandatory custody cleanup. Failed-transition annotations reload the last committed row and never retry an uncommitted result. A cooperative file lock does not replace host-wide authority. Durability assumes SQLite's OS/VFS/storage synchronization contract, not arbitrary disk or database tampering protection.
 
 Do not register this component as a production route from a green CI result. Do not remove UNKNOWN ledgers or stale locks to enable retries. Reconcile the original operation, request, effect and chat first. New runtime integration requires its own privacy, consent, recovery, release and real-device acceptance gates. No Core database rollback is part of this component.
 
 ## Review history and origin
 
-Independent static reviews found durability, clipboard-snapshot, nested-fence and duplicate-retry defects in earlier candidates; the current candidate includes their fixes and targeted regressions. The latest whole revision has root review and synthetic tests; it has no independent production acceptance. Runtime hard blockers are preserved.
+Independent static reviews found durability, clipboard-snapshot, nested-fence and duplicate-retry defects in earlier candidates. A PR review also found a failed-result-save retry after revoke/cancel and a stale dialog-path check. The current candidate fixes those paths and adds pre-commit failure/control-intervention and in-fence dialog regressions. The latest whole revision has root review and synthetic tests; it has no independent production acceptance. Runtime hard blockers are preserved.
 
 This new portable source was authored for REYA and uses documented CUA APIs by name. It imports no private HOME source and copies no upstream implementation. The repository's existing DeepSeek Harness MIT attribution and license are retained. This is not a claim of a formal provider partnership, guaranteed unlimited service or API access.
