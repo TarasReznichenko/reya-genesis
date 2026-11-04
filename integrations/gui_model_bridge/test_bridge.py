@@ -266,5 +266,12 @@ class Tests(unittest.TestCase):
     self.denied(p,r,dict(stop='OWNER_STOP',revoke='OWNER_REVOKED',cancel='REQUEST_CANCELLED')[control])
     self.assertEqual(g.copies,0);self.assertEqual(g.alerts,[])
     rec=p.ledger.read(r.request_id);self.assertIsNone(rec['clipboard_alert']);self.assertNotIn('clipboard_dirty_possible',rec)
+ def test_unbound_authority_denies_saved_result_read(self):
+  r,a,c,g,p=self.fixture();p.call(r);p.authority=DenyUnboundAuthority()
+  self.denied(p,r,'HOST_N1_CP_AUTHORITY_NOT_BOUND');self.assertEqual(g.sends,1)
+ def test_mutable_request_containers_rejected_before_staging(self):
+  r,a,c,g,p=self.fixture();self.denied(p,replace(r,sources=list(r.sources)),'REQUEST_CONTAINER_INVALID')
+  self.denied(p,replace(r,pin=replace(PIN,bounds=list(PIN.bounds))),'APP_PIN_INVALID')
+  self.assertEqual(g.sends,0);self.assertEqual(list(p.ledger.root.glob('*.txt')),[])
 
 if __name__=='__main__':unittest.main(verbosity=2)

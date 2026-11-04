@@ -56,16 +56,19 @@ class Request:
   return digest(encode(dict(operation_id=self.operation_id,person=self.person,thread=self.thread,
    model=self.model,payload_sha256=self.payload_sha256,max_input_bytes=self.max_input_bytes,max_output_bytes=self.max_output_bytes)))
  def validate(self):
+  need(type(self.pin) is AppPin and type(self.sources) is tuple and all(type(s) is Source for s in self.sources),'REQUEST_CONTAINER_INVALID')
+  need(type(self.pin.bounds) is tuple and len(self.pin.bounds)==4 and all(type(v) is int for v in self.pin.bounds) and self.pin.bounds[2]>0 and self.pin.bounds[3]>0,'APP_PIN_INVALID')
   need(str(uuid.UUID(self.request_id))==self.request_id,'REQUEST_ID_INVALID')
   need(str(uuid.UUID(self.operation_id))==self.operation_id,'OPERATION_ID_INVALID')
-  need(bool(self.person) and bool(self.thread),'PERSON_SCOPE_REQUIRED')
+  need(type(self.person) is str and bool(self.person) and type(self.thread) is str and bool(self.thread),'PERSON_SCOPE_REQUIRED')
   need(self.model in MODELS,'MODEL_UNSUPPORTED')
   need(all(type(v) is int and v>0 for v in (self.pin.pid,self.pin.window_id,self.pin.user_session,self.pin.dpi)),'APP_PIN_INVALID')
   need(all(type(v) is str and v for v in (self.pin.package,self.pin.version,self.pin.publisher,self.pin.exe_path,self.pin.process_start)),'APP_PIN_INVALID')
   need(all(re.fullmatch('[a-f0-9]{64}',v) for v in (self.pin.signature_sha256,self.pin.exe_sha256,self.pin.layout_sha256)),'APP_PIN_INVALID')
-  need(0<self.max_input_bytes<=16384 and 0<self.max_output_bytes<=65536,'SIZE_LIMIT_INVALID')
+  need(type(self.max_input_bytes) is int and type(self.max_output_bytes) is int and 0<self.max_input_bytes<=16384 and 0<self.max_output_bytes<=65536,'SIZE_LIMIT_INVALID')
   need(0<len(self.sources)<=8,'SOURCES_REQUIRED')
   for s in self.sources:
+   need(all(type(v) is str for v in (s.name,s.kind,s.text)),'SOURCE_TYPE_INVALID')
    need(s.kind in ('SYNTHETIC','PUBLIC_SOURCE'),'PRIVATE_CONTEXT_EXPORT_DENIED')
    need(bool(re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',s.name)),'SOURCE_NAME_INVALID')
  def render(self):
@@ -130,6 +133,7 @@ class Clipboard(Protocol):
 class DenyUnboundAuthority:
  """The only supplied real-host default. Fixture authority lives in tests only."""
  def check(self,request,phase):raise Blocked('HOST_N1_CP_AUTHORITY_NOT_BOUND')
+ def protect(self,request,phase):raise Blocked('HOST_N1_CP_AUTHORITY_NOT_BOUND')
  def provider_terms_allowed(self):return False
 
 class Ledger:

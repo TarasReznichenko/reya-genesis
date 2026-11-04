@@ -15,7 +15,7 @@ python -B verify_manifest.py
 python -B run_checks.py
 ```
 
-Run from this directory. The test runner writes an ignored receipt with source hashes, outputs and exit codes. The baseline has 36 Python tests and 17 JavaScript tests. UI, identity, N1, provider response and clipboard are synthetic ports; local files, SQLite transactions and an abrupt child process exit are real isolated fixtures. This does not prove actual desktop automation, account authorization, hardware power-loss recovery, or production acceptance.
+Run from this directory. The test runner writes an ignored receipt with source hashes, outputs and exit codes. The baseline has 38 Python tests and 17 JavaScript tests. UI, identity, N1, provider response and clipboard are synthetic ports; local files, SQLite transactions and an abrupt child process exit are real isolated fixtures. This does not prove actual desktop automation, account authorization, hardware power-loss recovery, or production acceptance.
 
 Negative cases cover app/process/window/DPI/layout/model drift, wrong foreground/locked session, expired login (`REQUIRES_OWNER_LOGIN`), unknown entitlement/terms, private source kind, rejected/tampered attachments, STOP/revocation/cancellation, concurrent writers, clipboard races/contention/restore failure, stale replies, uncertain Sends and duplicate result recovery. All three model labels are exercised only in synthetic contracts.
 

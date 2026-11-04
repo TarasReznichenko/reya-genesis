@@ -2,9 +2,9 @@
   "schema": "reya.portable-source/1",
   "scope": "SOURCE_ONLY_SYNTHETIC_PORTS_NO_LIVE_ADMISSION",
   "files": {
-    "bridge.py": "4c252cb319195afe32dce7d7e236c965f9d68284057d40aafdb82a6520eb4748",
+    "bridge.py": "5998f17ffa2d90da6d81e6ac520fc9c7326e9642bc96ef0de533108bbc5ec2b7",
     "cua_port.mjs": "ccf6abdbad626aacc5c4a7251462b6345200405a95839cd39a948bcc0f9cf5b7",
-    "test_bridge.py": "5d2961bd1dd37717494dee449a5b32e63889996fa198a65e6ae473383133898a",
+    "test_bridge.py": "5ce19e7d4ed865466f8f9cdb22fb8474b31de6780286be9b0b5e9c3c63adba1e",
     "test_cua_port.mjs": "8394d1d5ae115d82111bc1d2056d9f9bc854d08a8751752fc72c6ec23b9a2d45",
     "run_checks.py": "3c83c778ea6b2830d05c254fe9ea02ebdea9495fcfc6607bd1d3cd5278a278fa"
   }
